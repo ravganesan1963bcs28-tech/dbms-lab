@@ -1,0 +1,685 @@
+package jdbc;
+
+import java.sql.*;
+import java.util.InputMismatchException;
+import java.util.Scanner;
+
+public class ManagementSystemCLI {
+
+    static Connection con;
+
+    public static void main(String[] args) {
+
+        connectDB();
+        Scanner sc = new Scanner(System.in);
+        int choice;
+
+        do {
+            System.out.println("\n===== MANAGEMENT SYSTEM =====");
+            System.out.println("1. Insert");
+            System.out.println("2. Update");
+            System.out.println("3. Delete");
+            System.out.println("4. View");
+            System.out.println("5. Search");
+            System.out.println("6. Exit");
+            System.out.print("Enter choice: ");
+
+            choice = getInt(sc);
+
+            switch (choice) {
+                case 1: insert(sc); break;
+                case 2: update(sc); break;
+                case 3: delete(sc); break;
+                case 4: view(); break;
+                case 5: search(sc); break;
+                case 6: System.out.println("Exiting..."); break;
+                default: System.out.println("Invalid choice");
+            }
+
+        } while (choice != 6);
+    }
+
+    // ================= DB =================
+    static void connectDB() {
+        try {
+            Class.forName("oracle.jdbc.driver.OracleDriver");
+            con = DriverManager.getConnection(
+                    "jdbc:oracle:thin:@localhost:1521:XE", "system", "munees007");
+
+            con.setAutoCommit(false);
+            System.out.println(" Connected to Oracle");
+
+        } catch (Exception e) {
+            System.out.println(" Connection Failed");
+            e.printStackTrace();
+        }
+    }
+
+    // ================= INPUT =================
+    static int getInt(Scanner sc) {
+        while (true) {
+            try {
+                return sc.nextInt();
+            } catch (InputMismatchException e) {
+                System.out.print(" Invalid input! Enter numbers only: ");
+                sc.next();
+            }
+        }
+    }
+
+    static String getName(Scanner sc) {
+        while (true) {
+            String name = sc.next();
+            if (name.matches("[a-zA-Z]+")) {
+                return name;
+            } else {
+                System.out.print(" Invalid name! Only alphabets allowed: ");
+            }
+        }
+    }
+
+    // ================= INSERT =================
+    static void insert(Scanner sc) {
+        try {
+            System.out.print("Enter ID: ");
+            int id = getInt(sc);
+
+            System.out.print("Enter Name: ");
+            String name = getName(sc);
+
+            System.out.print("Enter Office Code: ");
+            int office = getInt(sc);
+
+            System.out.print("Enter Manager ID: ");
+            int manager = getInt(sc);   // ✅ NO VALIDATION
+
+            System.out.print("Enter Salary: ");
+            int salary = getInt(sc);
+
+            String sql = "INSERT INTO employee (employee_id, employee_name, office_code, manager_id, salary) VALUES (?, ?, ?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql);
+
+            ps.setInt(1, id);
+            ps.setString(2, name);
+            ps.setInt(3, office);
+            ps.setInt(4, manager); // 🔥 ALWAYS INSERT
+            ps.setInt(5, salary);
+
+            ps.executeUpdate();
+            con.commit();
+
+            System.out.println(" Inserted Successfully");
+
+        } catch (SQLException e) {
+            rollback();
+            handleError(e);
+        }
+    }
+
+    // ================= UPDATE =================
+    static void update(Scanner sc) {
+        try {
+            System.out.print("Enter Employee ID: ");
+            int id = getInt(sc);
+
+            System.out.println("\n--- Update Menu ---");
+            System.out.println("1. Name");
+            System.out.println("2. Salary");
+            System.out.println("3. Office");
+            System.out.println("4. Manager");
+            System.out.print("Enter choice: ");
+
+            int choice = getInt(sc);
+
+            PreparedStatement ps = null;
+
+            switch (choice) {
+
+                case 1:
+                    System.out.print("Enter New Name: ");
+                    String name = getName(sc);
+
+                    ps = con.prepareStatement(
+                        "UPDATE employee SET employee_name=? WHERE employee_id=?");
+                    ps.setString(1, name);
+                    ps.setInt(2, id);
+                    break;
+
+                case 2:
+                    System.out.print("Enter New Salary: ");
+                    int salary = getInt(sc);
+
+                    ps = con.prepareStatement(
+                        "UPDATE employee SET salary=? WHERE employee_id=?");
+                    ps.setInt(1, salary);
+                    ps.setInt(2, id);
+                    break;
+
+                case 3:
+                    System.out.print("Enter New Office Code: ");
+                    int office = getInt(sc);
+
+                    ps = con.prepareStatement(
+                        "UPDATE employee SET office_code=? WHERE employee_id=?");
+                    ps.setInt(1, office);
+                    ps.setInt(2, id);
+                    break;
+
+                case 4:
+                    System.out.print("Enter New Manager ID: ");
+                    int manager = getInt(sc);
+
+                    ps = con.prepareStatement(
+                        "UPDATE employee SET manager_id=? WHERE employee_id=?");
+                    ps.setInt(1, manager); // 🔥 NO CHECK
+                    ps.setInt(2, id);
+                    break;
+
+                default:
+                    System.out.println(" Invalid choice");
+                    return;
+            }
+
+            int rows = ps.executeUpdate();
+
+            if (rows == 0) {
+                System.out.println(" Employee Not Found");
+            } else {
+                con.commit();
+                System.out.println(" Updated Successfully");
+            }
+
+        } catch (SQLException e) {
+            rollback();
+            handleError(e);
+        }
+    }
+
+    // ================= DELETE =================
+    static void delete(Scanner sc) {
+        try {
+            System.out.print("Enter ID: ");
+            int id = getInt(sc);
+
+            PreparedStatement ps = con.prepareStatement(
+                    "DELETE FROM employee WHERE employee_id=?");
+
+            ps.setInt(1, id);
+
+            int rows = ps.executeUpdate();
+
+            if (rows == 0) {
+                System.out.println(" Employee Not Found");
+            } else {
+                con.commit();
+                System.out.println(" Deleted Successfully");
+            }
+
+        } catch (SQLException e) {
+            rollback();
+            handleError(e);
+        }
+    }
+
+    // ================= VIEW =================
+    static void view() {
+        try {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery(
+                    "SELECT employee_id, employee_name, office_code, manager_id, salary FROM employee");
+
+            System.out.println("\nID\tName\tOffice\tManager\tSalary");
+
+            while (rs.next()) {
+                System.out.println(
+                        rs.getInt(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getInt(3) + "\t" +
+                        rs.getInt(4) + "\t" +
+                        rs.getInt(5)
+                );
+            }
+
+        } catch (SQLException e) {
+            handleError(e);
+        }
+    }
+
+    // ================= SEARCH =================
+    static void search(Scanner sc) {
+        try {
+            System.out.print("Enter ID: ");
+            int id = getInt(sc);
+
+            PreparedStatement ps = con.prepareStatement(
+                    "SELECT * FROM employee WHERE employee_id=?");
+            ps.setInt(1, id);
+
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                System.out.println("\n Found:");
+                System.out.println("ID: " + rs.getInt(1));
+                System.out.println("Name: " + rs.getString(2));
+                System.out.println("Office: " + rs.getInt(3));
+                System.out.println("Manager: " + rs.getInt(4));
+                System.out.println("Salary: " + rs.getInt(5));
+            } else {
+                System.out.println(" Record Not Found");
+            }
+
+        } catch (SQLException e) {
+            handleError(e);
+        }
+    }
+
+    // ================= ROLLBACK =================
+    static void rollback() {
+        try {
+            if (con != null) con.rollback();
+        } catch (SQLException e) {
+            System.out.println(" Rollback Failed");
+        }
+    }
+
+    // ================= ERROR =================
+    static void handleError(SQLException e) {
+        String msg = e.getMessage();
+
+        if (msg.contains("ORA-00001"))
+            System.out.println(" Duplicate Employee ID");
+        else if (msg.contains("ORA-01722"))
+            System.out.println(" Invalid Number");
+        else if (msg.contains("ORA-01400"))
+            System.out.println(" NULL not allowed");
+        else if (msg.contains("ORA-02291"))
+            System.out.println(" Foreign key constraint exists → remove it to allow any manager ID");
+        else
+            e.printStackTrace();
+    }
+}
+
+
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.sql.*;
+
+public class ManagementSystem extends JFrame {
+
+    JTextField empId, empName, officeCode, managerId, salary;
+    JButton insertBtn, updateBtn, deleteBtn, viewBtn, searchBtn;
+    JTable table;
+    DefaultTableModel model;
+    Connection con;
+
+    public ManagementSystem() {
+        setTitle("Management System - Oracle JDBC");
+        setSize(900, 500);
+        setLayout(new FlowLayout());
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        // Fields
+        empId = new JTextField(5);
+        empName = new JTextField(10);
+        officeCode = new JTextField(5);
+        managerId = new JTextField(5);
+        salary = new JTextField(8);
+
+        add(new JLabel("Emp ID")); add(empId);
+        add(new JLabel("Name")); add(empName);
+        add(new JLabel("Office")); add(officeCode);
+        add(new JLabel("Manager")); add(managerId);
+        add(new JLabel("Salary")); add(salary);
+
+        // Buttons
+        insertBtn = new JButton("Insert");
+        updateBtn = new JButton("Update");
+        deleteBtn = new JButton("Delete");
+        viewBtn = new JButton("View");
+        searchBtn = new JButton("Search"); 
+
+        add(insertBtn); add(updateBtn); add(deleteBtn);
+        add(viewBtn); add(searchBtn);
+
+        // Table
+        model = new DefaultTableModel();
+        table = new JTable(model);
+        JScrollPane sp = new JScrollPane(table);
+        sp.setPreferredSize(new Dimension(850, 200));
+        add(sp);
+
+        connectDB();
+        buttonActions();
+
+        setVisible(true);
+    }
+
+    // CONNECT DB
+    void connectDB() {
+        try {
+            Class.forName("oracle.jdbc.driver.OracleDriver");
+            con = DriverManager.getConnection(
+                    "jdbc:oracle:thin:@localhost:1521:xe",
+                    "system",
+                    "munees007"
+            );
+            con.setAutoCommit(false);
+            JOptionPane.showMessageDialog(this, "Connected ");
+        } catch (Exception e) {
+            showError("Connection Failed", e);
+        }
+    }
+
+    // ERROR HANDLER
+    void showError(String msg, Exception e) {
+        JOptionPane.showMessageDialog(this, msg + "\n" + e.getMessage());
+    }
+
+    // ROLLBACK
+    void rollback() {
+        try { if (con != null) con.rollback(); }
+        catch (Exception e) { showError("Rollback Failed", e); }
+    }
+
+    // VALIDATION
+    boolean validateFields() {
+
+        StringBuilder msg = new StringBuilder();
+
+        // EMPTY FIELD CHECKS
+        if (empId.getText().trim().isEmpty()) {
+            msg.append("ID field missing\n");
+        }
+        if (empName.getText().trim().isEmpty()) {
+            msg.append("Name field missing\n");
+        }
+        if (officeCode.getText().trim().isEmpty()) {
+            msg.append("Office field missing\n");
+        }
+        if (salary.getText().trim().isEmpty()) {
+            msg.append("Salary field missing\n");
+        }
+
+        // SHOW ALL MISSING FIELDS AT ONCE
+        if (msg.length() > 0) {
+            JOptionPane.showMessageDialog(this, msg.toString());
+            return false;
+        }
+
+        // FORMAT VALIDATION
+        if (!empId.getText().matches("\\d+")) {
+            JOptionPane.showMessageDialog(this, "ID must be number");
+            return false;
+        }
+
+        if (!empName.getText().matches("[a-zA-Z ]+")) {
+            JOptionPane.showMessageDialog(this, "Name must be letters only");
+            return false;
+        }
+
+        if (!officeCode.getText().matches("\\d+")) {
+            JOptionPane.showMessageDialog(this, "Office must be number");
+            return false;
+        }
+
+        if (!salary.getText().matches("\\d+(\\.\\d+)?")) {
+            JOptionPane.showMessageDialog(this, "Salary must be numeric");
+            return false;
+        }
+
+        return true;
+    }
+
+    // INSERT
+    void insertEmployee() {
+
+        if (!validateFields()) return;
+
+        try {
+            int id = Integer.parseInt(empId.getText());
+            int office = Integer.parseInt(officeCode.getText());
+            double sal = Double.parseDouble(salary.getText());
+
+            PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO employee (employee_id, employee_name, office_code, manager_id, salary) VALUES (?, ?, ?, ?, ?)"
+            );
+
+            ps.setInt(1, id);
+            ps.setString(2, empName.getText());
+
+            // ✅ DIRECT OFFICE INSERT (NO TABLE CHECK)
+            ps.setInt(3, office);
+
+            // ✅ MANAGER CHECK (optional safety)
+            if (!managerId.getText().isEmpty()) {
+                int manager = Integer.parseInt(managerId.getText());
+
+                PreparedStatement checkMgr = con.prepareStatement(
+                    "SELECT employee_id FROM employee WHERE employee_id=?"
+                );
+                checkMgr.setInt(1, manager);
+                ResultSet rs = checkMgr.executeQuery();
+
+                if (rs.next()) {
+                    ps.setInt(4, manager);
+                } else {
+                    ps.setNull(4, Types.INTEGER);
+                }
+            } else {
+                ps.setNull(4, Types.INTEGER);
+            }
+
+            ps.setDouble(5, sal);
+
+            ps.executeUpdate();
+            con.commit();
+
+            JOptionPane.showMessageDialog(this, "Inserted Successfully ");
+            viewEmployees();
+
+        } catch (Exception e) {
+            rollback();
+            handleDBError(e);
+        }
+    }
+
+    // UPDATE
+    void updateEmployee() {
+
+        if (!validateFields()) return; // optional but recommended
+
+        try {
+            PreparedStatement ps = con.prepareStatement(
+                "UPDATE employee SET employee_name=?, office_code=?, manager_id=?, salary=? WHERE employee_id=?"
+            );
+
+            ps.setString(1, empName.getText());
+            ps.setInt(2, Integer.parseInt(officeCode.getText()));
+
+            // Manager handling (same logic as insert)
+            if (!managerId.getText().trim().isEmpty()) {
+                ps.setInt(3, Integer.parseInt(managerId.getText()));
+            } else {
+                ps.setNull(3, Types.INTEGER);
+            }
+
+            ps.setDouble(4, Double.parseDouble(salary.getText()));
+            ps.setInt(5, Integer.parseInt(empId.getText()));
+
+            int rows = ps.executeUpdate();
+
+            if (rows == 0) {
+                JOptionPane.showMessageDialog(this, "Employee Not Found");
+            } else {
+                con.commit();
+                JOptionPane.showMessageDialog(this, "Updated Successfully");
+                viewEmployees();
+            }
+
+        } catch (Exception e) {
+            rollback();
+            handleDBError(e);
+        }
+    }
+    // DELETE
+    void deleteEmployee() {
+
+        try {
+            int id = Integer.parseInt(empId.getText());
+
+            PreparedStatement ps = con.prepareStatement(
+                "DELETE FROM employee WHERE employee_id=?"
+            );
+            ps.setInt(1, id);
+
+            int rows = ps.executeUpdate();
+
+            if (rows == 0) {
+                JOptionPane.showMessageDialog(this, "Employee Not Found");
+            } else {
+                con.commit();
+                JOptionPane.showMessageDialog(this, "Deleted Successfully");
+                viewEmployees();
+            }
+
+        } catch (Exception e) {
+            rollback();
+            handleDBError(e);
+        }
+    }
+
+    // VIEW
+    void viewEmployees() {
+
+        try {
+            model.setRowCount(0);
+            model.setColumnIdentifiers(new String[]{"ID","Name","Office","Manager","Salary"});
+
+            PreparedStatement ps = con.prepareStatement(
+                "SELECT employee_id, employee_name, office_code, manager_id, salary FROM employee"
+            );
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        rs.getInt(1),
+                        rs.getString(2),
+                        rs.getInt(3),
+                        rs.getObject(4),
+                        rs.getDouble(5)
+                });
+            }
+
+        } catch (Exception e) {
+            showError("View Failed", e);
+        }
+    }
+
+    // SEARCH
+ // 🔒 LOCK UI (after search)
+    void lockUI() {
+        table.setEnabled(false);
+        table.setRowSelectionAllowed(false);
+
+        empName.setEditable(false);
+        officeCode.setEditable(false);
+        managerId.setEditable(false);
+        salary.setEditable(false);
+
+        // ID stays editable
+        empId.setEditable(true);
+    }
+
+    // 🔓 UNLOCK UI (before operations)
+    void unlockUI() {
+        table.setEnabled(true);
+        table.setRowSelectionAllowed(true);
+
+        empId.setEditable(true);
+        empName.setEditable(true);
+        officeCode.setEditable(true);
+        managerId.setEditable(true);
+        salary.setEditable(true);
+    }
+
+    // 🧹 CLEAR INPUT FIELDS
+    void clearFields() {
+        empId.setText("");
+        empName.setText("");
+        officeCode.setText("");
+        managerId.setText("");
+        salary.setText("");
+    }
+    void searchEmployee() {
+
+        try {
+            model.setRowCount(0);
+
+            // 🔹 Ask user for ID in popup
+            String idText = JOptionPane.showInputDialog(this, "Enter Employee ID:");
+
+            // ❌ If user cancels or empty
+            if (idText == null || idText.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Search cancelled or empty input");
+                return;
+            }
+
+            // ❌ Validate number
+            if (!idText.matches("\\d+")) {
+                JOptionPane.showMessageDialog(this, "ID must be numeric");
+                return;
+            }
+
+            model.setColumnIdentifiers(new String[]{
+                "ID", "Name", "Office", "Manager", "Salary"
+            });
+
+            PreparedStatement ps = con.prepareStatement(
+                "SELECT employee_id, employee_name, office_code, manager_id, salary FROM employee WHERE employee_id=?"
+            );
+
+            ps.setInt(1, Integer.parseInt(idText));
+
+            ResultSet rs = ps.executeQuery();
+
+            boolean found = false;
+
+            while (rs.next()) {
+                found = true;
+
+                model.addRow(new Object[]{
+                    rs.getInt("employee_id"),
+                    rs.getString("employee_name"),
+                    rs.getInt("office_code"),
+                    rs.getObject("manager_id"),
+                    rs.getDouble("salary")
+                });
+            }
+
+            if (!found) {
+                JOptionPane.showMessageDialog(this, "Employee Not Found");
+            }
+
+            // 🔓 IMPORTANT: Unlock UI after search
+            unlockUI();
+
+        } catch (Exception e) {
+            showError("Search Failed", e);
+        }
+    }
+    // BUTTON ACTIONS
+    void buttonActions() {
+        insertBtn.addActionListener(e -> insertEmployee());
+        updateBtn.addActionListener(e -> updateEmployee());
+        deleteBtn.addActionListener(e -> deleteEmployee());
+        viewBtn.addActionListener(e -> viewEmployees());
+        searchBtn.addActionListener(e -> searchEmployee());
+    }
+
+    public static void main(String[] args) {
+        new ManagementSystem();
+    }
+}
